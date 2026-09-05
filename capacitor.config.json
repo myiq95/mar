@@ -1,0 +1,14 @@
+{
+  "appId": "com.marvin3.reader",
+  "appName": "Marvin 3 Reader",
+  "webDir": "dist",
+  "bundledWebRuntime": false,
+  "plugins": {
+    "SplashScreen": {
+      "launchShowDuration": 0
+    }
+  },
+  "ios": {
+    "contentInset": "always"
+  }
+}
