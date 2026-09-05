@@ -9,40 +9,81 @@ jobs:
   build-ipa:
     runs-on: macos-14
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Node.js 24
+        uses: actions/setup-node@v5
         with:
-          node-version: 20
-          cache: 'npm'
-      - uses: maxim-lobanov/setup-xcode@v1
+          node-version: 24
+
+      - name: Setup Xcode
+        uses: maxim-lobanov/setup-xcode@v1
         with:
           xcode-version: '15.4'
-      - run: |
-          npm ci || npm install
+
+      - name: Install dependencies
+        run: |
+          # lock 파일 없어도 에러 안 나게 npm install 사용
+          npm install
           mkdir -p dist
           cp -r index.html manifest.json sw.js icons dist/ 2>/dev/null || true
-      - run: |
-          sudo gem install cocoapods
+          ls -la dist/
+
+      - name: Install CocoaPods
+        run: |
+          sudo gem install cocoapods -N
+          pod --version
+
+      - name: Add iOS platform
+        run: |
           npx cap add ios || echo "ios exists"
           npx cap copy ios
-      - working-directory: ios/App
+
+      - name: Install Pods
+        working-directory: ios/App
         run: pod install --repo-update
-      - run: |
-          cp BackgroundTTSPlugin.swift ios/App/App/ 2>/dev/null || cp ios/BackgroundTTSPlugin.swift ios/App/App/BackgroundTTSPlugin.swift || true
+
+      - name: Inject Background Audio
+        run: |
+          PLUGIN="BackgroundTTSPlugin.swift"
+          DEST="ios/App/App"
+          mkdir -p "$DEST"
+          if [ -f "$PLUGIN" ]; then cp "$PLUGIN" "$DEST/"; fi
+          if [ -f "ios/BackgroundTTSPlugin.swift" ]; then cp "ios/BackgroundTTSPlugin.swift" "$DEST/"; fi
           INFO_PLIST="ios/App/App/Info.plist"
           if ! grep -q "UIBackgroundModes" "$INFO_PLIST"; then
             /usr/libexec/PlistBuddy -c "Add :UIBackgroundModes array" "$INFO_PLIST" || true
             /usr/libexec/PlistBuddy -c "Add :UIBackgroundModes:0 string audio" "$INFO_PLIST" || true
           fi
-      - run: |
+
+      - name: Build Archive (No Signing)
+        run: |
           cd ios/App
-          xcodebuild -workspace App.xcworkspace -scheme App -configuration Release -sdk iphoneos -archivePath build/App.xcarchive CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO archive
-      - run: |
+          xcodebuild -workspace App.xcworkspace \
+            -scheme App \
+            -configuration Release \
+            -sdk iphoneos \
+            -archivePath build/App.xcarchive \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            AD_HOC_CODE_SIGNING_ALLOWED=YES \
+            archive
+
+      - name: Create IPA
+        run: |
           cd ios/App
           APP_PATH=$(find build/App.xcarchive -name "*.app" -type d | head -n 1)
-          mkdir -p Payload && cp -r "$APP_PATH" Payload/
+          echo "App at $APP_PATH"
+          rm -rf Payload && mkdir Payload
+          cp -r "$APP_PATH" Payload/
           zip -r Marvin3Reader-unsigned.ipa Payload
-      - uses: actions/upload-artifact@v4
+          ls -lh *.ipa
+
+      - name: Upload IPA
+        uses: actions/upload-artifact@v5
         with:
           name: Marvin3Reader-IPA
           path: ios/App/Marvin3Reader-unsigned.ipa
+          retention-days: 30
