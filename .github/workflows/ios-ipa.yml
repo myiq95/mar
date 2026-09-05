@@ -24,8 +24,10 @@ jobs:
 
       - name: Install dependencies
         run: |
-          # lock 파일 없어도 에러 안 나게 npm install 사용
-          npm install
+          npm install --legacy-peer-deps
+          mkdir -p dist
+          cp -r index.html manifest.json sw.js icons dist/ 2>/dev/null || true
+          ls -la dist/
           mkdir -p dist
           cp -r index.html manifest.json sw.js icons dist/ 2>/dev/null || true
           ls -la dist/
